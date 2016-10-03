@@ -1,84 +1,88 @@
 (function () {
-	'use strict';
 
-	angular
-	.module("NarrowItDownApp", [])
-	.controller("NarrowItDownController", NarrowItDownController)
-	.service("MenuSearchService", MenuSearchService)
-	.directive('foundItems', FoundItemsDirective)
-	.constant('menuBaseUrl', "https://davids-restaurant.herokuapp.com");
+  angular.module("NarrowItDownApp", [])
+  .controller('NarrowItDownController', NarrowItDownController)
+  .service('MenuSearchService', MenuSearchService)
+  .constant('APIPath', 'https://davids-restaurant.herokuapp.com/')
+  .directive('foundItems', FoundItemsDirective);
 
+  NarrowItDownController.$inject = ['MenuSearchService'];
+  function NarrowItDownController(MenuSearchService) {
+    var narrowCtrl = this;
 
-    //directive
-    function FoundItemsDirective() {
-    	var ddo = {
-    		templateUrl: 'foundItems.html',
-    		scope: {
-    			menuItems: '<',
-    			onRemove: '&'
-    		},
-    		controller: FoundItemsDirectiveController,
-    		controllerAs: 'list',
-    		bindToController: true,
-    	};
+    narrowCtrl.searchTerm = "";
+    narrowCtrl.found = [];
 
-    	return ddo;
+    narrowCtrl.getMatchedMenuItems = function () {
+
+      if (narrowCtrl.searchTerm !== "") {
+        var promise = MenuSearchService.getMatchedMenuItems(narrowCtrl.searchTerm);
+          promise.then(function(response) {
+            // console.log(response);
+            narrowCtrl.found = response;
+          });
+      } else {
+        narrowCtrl.found = [];
+      }
     }
 
-    function FoundItemsDirectiveController() {
-    	var list = this;
-
-    	list.isEmpty =  function() {
-    		return (list.menuItems && list.menuItems.length === 0);
-    	}
+    narrowCtrl.removeItem = function (index) {
+      narrowCtrl.found.splice(index, 1);
     }
 
+  }
 
-    //application controller
-    NarrowItDownController.$inject = ['MenuSearchService'];
-    function NarrowItDownController(MenuSearchService) {
-    	var controller = this;
 
-    	controller.searchTerm = "";
-    	controller.found = null;  //null by default in order to prevent the display if 'Nothing found' from the very begining
+  MenuSearchService.$inject = ['$http', '$q', 'APIPath'];
+  function MenuSearchService($http, $q, APIPath) {
 
-    	controller.findMenuItems = function() {
-    		controller.found = [];
+    var searchSvc = this;
 
-    		if (controller.searchTerm) {
-    			controller.found = MenuSearchService
-    			.getMatchedMenuItems(controller.searchTerm)
-    			.then(function (foundItems) {
-    				controller.found = foundItems;
-    			});
-    		}
-    	}
+    searchSvc.getMatchedMenuItems = function (searchTerm) {
+      var httpRequest = {
+        method: 'GET',
+        url: APIPath + 'menu_items.json'
+      }
 
-    	controller.putAway = function(index) {
-    		if (controller.found && controller.found.length > index) {
-    			controller.found.splice(index, 1);
-    		}
-    	}
+      return $http(httpRequest).then(function (result) {
+        // process result and only keep items that match
+        var items = result.data.menu_items;
+        var foundItems = [];
+        for (var i = 0; i < items.length; i++) {
+          var itemDescription = items[i].description;
+          if (itemDescription.toLowerCase().indexOf(searchTerm.toLowerCase()) !== -1) {
+            foundItems.push(items[i]);
+          }
+        }
+        // return processed items
+        return foundItems;
+      });
+    }
+  }
+
+  function FoundItemsDirectiveController() {
+    var foundList = this;
+
+    foundList.removeItem = function (index) {
+      foundList.onRemove({index: index});
     }
 
+  }
 
-    MenuSearchService.$inject = ['$http', 'menuBaseUrl'];
-    function MenuSearchService($http, menuBaseUrl) {
-    	var self = this;
+  function FoundItemsDirective() {
+    var ddo = {
+        restrict: 'E',
+        templateUrl: 'templates/list.html',
+        scope: {
+          items: '<foundItems',
+          onRemove: '&'
+        },
+        controller: FoundItemsDirectiveController,
+        controllerAs: 'foundList',
+        bindToController: true
+    };
 
-    	self.getMatchedMenuItems = function(searchTerm) {
-    		return  $http({
-    			method: "GET",
-    			url: (menuBaseUrl + "/menu_items.json")
-    		}).then(function (response) {
-    			var foundItems = response.data.menu_items;
-    			var normalizedSearchTerm = searchTerm.toUpperCase();
-
-    			return foundItems.filter(function (item) {
-    				return item.description.toUpperCase().includes(normalizedSearchTerm);
-    			});
-    		});
-    	}
-    }
+    return ddo;
+  }
 
 })();
